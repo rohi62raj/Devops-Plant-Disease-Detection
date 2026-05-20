@@ -1,0 +1,25 @@
+services:
+  plant-disease-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${DOCKERHUB_USERNAME:-plantdisease}/plant-disease-xai:${IMAGE_TAG:-latest}
+    container_name: plant-disease-xai-api
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: development
+      PYTHONUNBUFFERED: "1"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/models', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
