@@ -32,40 +32,42 @@ pipeline {
                 echo "Built image: ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
+stage('Smoke Test') {
+    steps {
+        echo '=== Stage 3: Running Smoke Test ==='
 
-        stage('Smoke Test') {
-            steps {
-                echo '=== Stage 3: Running Smoke Test ==='
-                script {
-                    def containerName = "smoke-test-${env.BUILD_NUMBER}"
+        script {
 
-                    // Run container (no port mapping needed — we use container IP directly)
-                    sh "docker run -d --name ${containerName} ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}"
+            def containerName = "smoke-test-${env.BUILD_NUMBER}"
 
-                    try {
-                        // Wait for PyTorch models to load (~90 seconds)
-                        sleep(time: 90, unit: 'SECONDS')
+            sh "docker run -d --name ${containerName} ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}"
 
-                        // Get the container IP on the Docker bridge network
-                        def containerIp = sh(
-                            script: "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}",
-                            returnStdout: true
-                        ).trim()
+            try {
 
-                        echo "Smoke test container IP: ${containerIp}"
+                echo 'Waiting for FastAPI + PyTorch models to initialize...'
 
-                        // Health check — test /api/models endpoint via container IP
-                        sh "curl -f --max-time 15 http://${containerIp}:8000/api/models"
-                        echo 'Smoke test PASSED — API is responding'
-                    } finally {
-                        // Always clean up the test container
-                        sh "docker stop ${containerName} || true"
-                        sh "docker rm ${containerName} || true"
-                    }
-                }
+                sleep(time: 90, unit: 'SECONDS')
+
+                def containerIp = sh(
+                    script: "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}",
+                    returnStdout: true
+                ).trim()
+
+                echo "Smoke test container IP: ${containerIp}"
+
+                sh "curl -f --max-time 30 http://${containerIp}:8000/health"
+
+                echo 'Smoke test PASSED — API is responding'
+
+            } finally {
+
+                sh "docker stop ${containerName} || true"
+
+                sh "docker rm ${containerName} || true"
             }
         }
-
+    }
+}
         stage('Push to DockerHub') {
             steps {
                 echo '=== Stage 4: Pushing Image to DockerHub ==='
