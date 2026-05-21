@@ -37,22 +37,30 @@ pipeline {
             steps {
                 echo '=== Stage 3: Running Smoke Test ==='
                 script {
-                    // Run container in background
-                    def container = dockerImage.run("-d -p 9090:8000 --name smoke-test-${env.BUILD_NUMBER}")
-                    try {
-                        // Wait for the app to start
-                        sleep(time: 60, unit: 'SECONDS')
+                    def containerName = "smoke-test-${env.BUILD_NUMBER}"
 
-                        // Health check — test /api/models endpoint
-                        if (isUnix()) {
-                            sh 'curl -f http://localhost:9090/api/models || exit 1'
-                        } else {
-                            powershell 'Invoke-RestMethod http://localhost:9090/api/models'
-                        }
+                    // Run container (no port mapping needed — we use container IP directly)
+                    sh "docker run -d --name ${containerName} ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+                    try {
+                        // Wait for PyTorch models to load (~90 seconds)
+                        sleep(time: 90, unit: 'SECONDS')
+
+                        // Get the container IP on the Docker bridge network
+                        def containerIp = sh(
+                            script: "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}",
+                            returnStdout: true
+                        ).trim()
+
+                        echo "Smoke test container IP: ${containerIp}"
+
+                        // Health check — test /api/models endpoint via container IP
+                        sh "curl -f --max-time 15 http://${containerIp}:8000/api/models"
                         echo 'Smoke test PASSED — API is responding'
                     } finally {
                         // Always clean up the test container
-                        container.stop()
+                        sh "docker stop ${containerName} || true"
+                        sh "docker rm ${containerName} || true"
                     }
                 }
             }
@@ -75,13 +83,7 @@ pipeline {
         stage('Cleanup') {
             steps {
                 echo '=== Stage 5: Cleaning Up Local Images ==='
-                script {
-                    if (isUnix()) {
-                        sh "docker rmi ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} || true"
-                    } else {
-                        powershell "docker rmi ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} -ErrorAction SilentlyContinue"
-                    }
-                }
+                sh "docker rmi ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} || true"
             }
         }
     }

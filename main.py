@@ -263,6 +263,18 @@ def treatment_payload(class_name: str) -> dict[str, Any]:
     }
 
 
+@app.get("/health")
+def health_check() -> JSONResponse:
+    """Lightweight health check for container orchestration and CI/CD smoke tests."""
+    return JSONResponse({
+        "status": "healthy",
+        "app": "PhytoScan AI",
+        "version": "2.1.0",
+        "device": str(DEVICE),
+        "models_available": len(MODEL_FILES),
+    })
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(UI_FILE)
