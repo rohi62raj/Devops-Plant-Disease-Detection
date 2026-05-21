@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${DOCKERHUB_USERNAME:-plantdisease}/plant-disease-xai:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME:-12326280}/plant-disease-xai:${IMAGE_TAG:-latest}
     container_name: plant-disease-xai-api
     ports:
       - "8000:8000"
